@@ -25,7 +25,13 @@ function [spectrum, info] = generate_ship_spectrum(params, target_specs, wav_fil
 %       .demon         - 32×1 DEMON 频段 (线性功率, 归一化前)
 
 %% 默认参数
-if nargin < 3 || isempty(wav_file) || ~exist(wav_file, 'file')
+if nargin < 3 || isempty(wav_file)
+    use_wav = false;
+elseif ~exist(wav_file, 'file')
+    % 路径写错时不能静默退化为仿真频谱：那会让特征辅助实验在不知情下失真
+    warning('generate_ship_spectrum:missingWav', ...
+        ['找不到音频文件 "%s"，已回退到仿真模式。' ...
+         '请检查路径，建议用 repo_path(''data'', ''xx.wav'') 解析。'], wav_file);
     use_wav = false;
 else
     use_wav = true;

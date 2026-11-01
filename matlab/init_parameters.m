@@ -94,11 +94,11 @@ params.clutter_spec_max = 0;          % 杂波谱功率上界 (dB)
 % params.target_specs(2) = struct('blade_count', 5, 'shaft_freq', 4.5, ...
 %     'n_lines', 10, 'seed', 200, 'wav_file', '');
 
-% WAV 文件导入模式
+% WAV 文件导入模式（路径由 repo_path 解析为绝对路径，与 CWD 无关）
 params.target_specs(1) = struct('blade_count', 4, 'shaft_freq', 3, ...
-    'n_lines', 8, 'seed', 100, 'wav_file', 'Cargo_40s.wav');
+    'n_lines', 8, 'seed', 100, 'wav_file', repo_path('data', 'Cargo_40s.wav'));
 params.target_specs(2) = struct('blade_count', 5, 'shaft_freq', 4.5, ...
-    'n_lines', 10, 'seed', 200, 'wav_file', 'Motor_40s.wav');
+    'n_lines', 10, 'seed', 200, 'wav_file', repo_path('data', 'Motor_40s.wav'));
 
 %% UKF 参数
 params.alpha = 1e-3;

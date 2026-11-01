@@ -1,9 +1,9 @@
 % compare_ship_spectra.m — 对比两艘舰船的 LOFAR+DEMON 频谱
 clear; close all;
 
-%% 文件路径
-wav1 = 'Cargo_40s.wav';
-wav2 = 'Motor_40s.wav';
+%% 文件路径（由 repo_path 解析为绝对路径，与 CWD 无关）
+wav1 = repo_path('data', 'Cargo_40s.wav');
+wav2 = repo_path('data', 'Motor_40s.wav');
 
 % 如果 WAV 不存在则回退到仿真模式
 params = init_parameters();

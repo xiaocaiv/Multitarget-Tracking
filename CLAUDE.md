@@ -4,15 +4,30 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## How to Run
 
+All `.m` files live in `matlab/`; run from the repository root:
+
 ```bash
 # Run the full simulation (MATLAB R2024a):
-matlab -batch "main"
+matlab -batch "addpath('matlab'); main"
 
 # Compare single-model CV vs IMM over Monte Carlo runs:
-matlab -batch "compare_imm"
+matlab -batch "addpath('matlab'); compare_imm"
 ```
 
-All files must be on the MATLAB path (they are in a flat directory). Requires Statistics and Machine Learning Toolbox (`chi2inv`, `poissrnd`) and Signal Processing Toolbox (`spectrogram`, `hilbert`, `butter`, `filtfilt` — only when `use_features=true` with wav import).
+Alternatively `cd matlab` first and call `matlab -batch "main"`. In the MATLAB GUI add the folder once with `addpath('matlab')`.
+
+### Repository layout
+
+```
+matlab/     all simulation code (.m), flat inside this folder
+data/       ship-radiated-noise samples for the wav feature mode
+docs/       design and implementation notes (Chinese)
+archive/    pre-refactor .bak rollbacks, not referenced by any code
+```
+
+Data paths are resolved by `repo_path.m`, which derives the repository root from its own file location rather than from the CWD. Never hardcode a relative `.wav` path: `generate_ship_spectrum` falls back to simulated spectra when the file is missing, so a stale relative path silently yields fake feature data (it now raises a warning).
+
+Requires Statistics and Machine Learning Toolbox (`chi2inv`, `poissrnd`) and Signal Processing Toolbox (`spectrogram`, `hilbert`, `butter`, `filtfilt` — only when `use_features=true` with wav import).
 
 ## Architecture
 

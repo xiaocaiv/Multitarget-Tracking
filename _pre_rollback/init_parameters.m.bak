@@ -1,0 +1,153 @@
+function params = init_parameters(overrides)
+%INIT_PARAMETERS 初始化双平台协同跟踪系统全部参数
+%   params = INIT_PARAMETERS() 使用默认参数
+%   params = INIT_PARAMETERS(overrides) 用 overrides 结构体的字段覆盖默认值
+
+if nargin < 1, overrides = struct(); end
+
+%% 仿真参数
+params.T_sim = 200;             % 仿真总时长 (s)
+params.dt = 1;                  % 时间步长 (s)
+params.K = params.T_sim / params.dt;  % 总步数
+
+%% 观测平台参数
+params.plat1_pos = [0; 0];      % 平台1 位置 (m)
+params.plat2_pos = [1000; 0];   % 平台2 位置 (m)
+
+%% 移动平台参数 (舰船运动学: 一阶 Nomoto 转艏响应)
+params.mobile_platforms = true;          % true = 移动平台 + ECM 优化
+params.plat1_speed = 6;                  % 平台1 航速 (m/s, 约 11.7 kn)
+params.plat2_speed = 6;                  % 平台2 航速 (m/s)
+params.plat1_init_heading = pi/4;        % 平台1 初始航向 (指向监视区中心)
+params.plat2_init_heading = 3*pi/4;      % 平台2 初始航向
+params.plat_max_turn_rate = 1 * pi / 180;% 最大转艏角速度 (rad/s, 约 1 deg/s)
+params.plat_turn_tau = 30;               % Nomoto 一阶转艏时间常数 (s)
+params.ecm_candidate_rates = (-1:0.25:1) * pi / 180;  % 候选转艏角速度 (rad/s)
+params.ecm_lambda_smooth = 0.3;          % 转艏变化平滑惩罚权重
+params.ecm_horizon = 60;                 % ECM 滚动决策时域 (步)
+params.ecm_r_min = 300;                  % 最小逼近距离 (m), 防止绕圈
+params.ecm_lambda_penalty = 0.5;         % 距离惩罚强度
+
+%% 目标参数
+params.num_targets = 2;
+
+%% 场景 (目标初始状态 + 机动/变速配置, 见 scenario_defs.m)
+%   'maneuver' — 双目标协调转弯 (默认)
+%   'parallel' — 两目标匀速平行运动
+%   'crossing' — 两目标匀速交叉运动
+%   'speed'    — 一目标匀速, 另一目标变速
+params.scenario = 'maneuver';
+
+%% 运动模型参数 (IMM: CV + CT + CA)
+% 状态向量: x = [px; py; vx; vy; omega; ax; ay]  (7 维)
+%   omega — 转弯率 (rad/s), 由 CT 模型估计;  ax/ay — 加速度 (m/s^2), 由 CA 模型估计
+% 各模型的状态转移矩阵与过程噪声在 build_motion_models.m 中按模型生成
+params.sigma_a_cv = 0.5;                % CV 加速度噪声标准差 (m/s^2)
+params.sigma_omega_cv = 0.1 * pi / 180; % CV 转弯率随机游走 (rad/s 每步)
+
+%% IMM 参数
+params.imm_models = {'CV', 'CT', 'CA'}; % 模型集合; {'CV'} 即退化为单模型匀速滤波
+params.imm_transition = [0.94, 0.03, 0.03;   % Pi(i,j) = P(模型 j | 模型 i)
+                         0.03, 0.94, 0.03;
+                         0.03, 0.03, 0.94];
+params.imm_mu0 = [0.4; 0.4; 0.2];       % 初始模型概率
+params.sigma_a_ct = 0.4;                % CT 加速度噪声标准差 (m/s^2)
+params.sigma_omega_ct = 0.8 * pi / 180; % CT 转弯率随机游走 (rad/s 每步)
+params.sigma_omega_ca = 0.1 * pi / 180; % CA 转弯率随机游走 (rad/s 每步, CA 不转弯)
+params.sigma_jerk = 0.05;               % CA jerk 噪声标准差 (m/s^3)
+params.sigma_accel_rw = 0.1;            % CV/CT 加速度状态随机游走 (m/s^2 每步)
+params.omega_init_std = 5 * pi / 180;   % 新航迹转弯率标准差 (rad/s)
+params.accel_init_std = 0.3;            % 新航迹加速度标准差 (m/s^2)
+
+%% 量测参数
+params.sigma_bearing = 1 * pi / 180;  % 方位角标准差 1°
+params.R = params.sigma_bearing^2;    % 量测噪声协方差 (标量)
+
+%% 检测与杂波
+params.Pd = 0.9;                % 检测概率
+params.lambda_c = 3;            % 每帧每平台杂波数期望值
+params.clutter_range = [-pi, pi];  % 杂波方位角范围
+params.surveil_region = [-500, 1500, -500, 1500];  % [xmin, xmax, ymin, ymax]
+
+%% 频谱特征参数 (LOFAR + DEMON 联合)
+params.use_features = true;           % 主开关: false 时完全兼容原系统
+
+% 频谱结构定义
+params.N_lofar = 64;
+params.N_demon = 32;
+params.N_features = params.N_lofar + params.N_demon;
+params.lofar_freqs = logspace(log10(10), log10(500), params.N_lofar)';
+params.demon_freqs = linspace(1, 50, params.N_demon)';
+
+% 量测噪声
+params.sigma_spectral = 3;            % 频谱高斯噪声标准差 (dB)
+
+% 相似度参数
+params.feature_gamma = 8;             % 锐化因子 (分段 LOFAR/DEMON)
+
+% 杂波频谱参数
+params.clutter_spec_min = -60;        % 杂波谱功率下界 (dB)
+params.clutter_spec_max = 0;          % 杂波谱功率上界 (dB)
+
+% 目标特征参数
+% 目标特征参数
+% 仿真模式 (空字符串)
+% params.target_specs(1) = struct('blade_count', 4, 'shaft_freq', 3, ...
+%     'n_lines', 8, 'seed', 100, 'wav_file', '');
+% params.target_specs(2) = struct('blade_count', 5, 'shaft_freq', 4.5, ...
+%     'n_lines', 10, 'seed', 200, 'wav_file', '');
+
+% WAV 文件导入模式
+params.target_specs(1) = struct('blade_count', 4, 'shaft_freq', 3, ...
+    'n_lines', 8, 'seed', 100, 'wav_file', 'Cargo_40s.wav');
+params.target_specs(2) = struct('blade_count', 5, 'shaft_freq', 4.5, ...
+    'n_lines', 10, 'seed', 200, 'wav_file', 'Motor_40s.wav');
+
+%% UKF 参数
+params.alpha = 1e-3;
+params.beta = 2;
+params.kappa = 0;
+params.state_dim = 7;
+
+%% JPDA 参数
+params.Pg = 0.99;               % 波门概率
+params.gate_gamma = chi2inv(params.Pg, 1);  % 1-DOF 波门阈值
+
+%% 航迹管理参数
+params.confirm_hits = 3;        % 确认航迹所需连续关联次数
+params.max_misses = 3;          % 航迹删除所需连续丢失次数
+params.init_cov = diag([1000, 1000, 100, 100, ...
+    params.omega_init_std^2, params.accel_init_std^2, params.accel_init_std^2]);  % 新航迹初始协方差
+params.max_new_tracks = 3;      % 每步最多新建航迹数
+
+%% 绘图参数
+params.plot_bearing_lines = false;       % 轨迹图上叠加双站方位线
+params.plot_bearing_every = 25;         % 每隔多少步画一组方位线 (步)
+
+%% GOSPA 评价参数 (多目标跟踪指标, 见 gospar.m / eval_gospa.m)
+params.gospa_p = 2;             % 距离阶数 p (1 或 2; 2 = 平方误差口径)
+params.gospa_c = 100;           % 截断参数 c (m): 超出 c 的定位误差按 c 计,
+                                % 约取标称位置误差的 5~10 倍; 越小越严格
+params.gospa_alpha = 2;         % 基数惩罚因子 alpha (推荐 2, 保证度量对称)
+params.gospa_use_confirmed = true;  % true = 仅用已确认航迹参与评价
+
+%% 应用场景 (须在覆盖参数之前, 以便覆盖中可单独修改目标初值/机动段)
+if isfield(overrides, 'scenario')
+    params.scenario = overrides.scenario;
+end
+params = apply_scenario(params, params.scenario);
+
+%% 应用覆盖参数
+fns = fieldnames(overrides);
+for i = 1:length(fns)
+    if isfield(params, fns{i})
+        params.(fns{i}) = overrides.(fns{i});
+    end
+end
+
+%% 构建 IMM 模型集合 (必须在应用覆盖参数之后, 以支持切换模型集)
+params.init_cov(5, 5) = params.omega_init_std^2;   % 保持与转弯率先验一致
+params.init_cov(6, 6) = params.accel_init_std^2;
+params.init_cov(7, 7) = params.accel_init_std^2;
+params.mm = build_motion_models(params);
+end

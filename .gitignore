@@ -1,0 +1,14 @@
+# MATLAB autosave / temporary
+*.asv
+*.autosave
+*.m~
+*~
+
+# MATLAB build / cache
+slprj/
+codegen/
+
+# Windows / macOS noise
+Thumbs.db
+Desktop.ini
+.DS_Store

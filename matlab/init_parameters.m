@@ -62,7 +62,7 @@ params.R = params.sigma_bearing^2;    % 量测噪声协方差 (标量)
 
 %% 检测与杂波
 params.Pd = 0.9;                % 检测概率
-params.lambda_c = 3;            % 每帧每平台杂波数期望值
+params.lambda_c = 2;            % 每帧每平台杂波数期望值
 params.clutter_range = [-pi, pi];  % 杂波方位角范围
 params.surveil_region = [-500, 1500, -500, 1500];  % [xmin, xmax, ymin, ymax]
 
@@ -112,10 +112,15 @@ params.gate_gamma = chi2inv(params.Pg, 1);  % 1-DOF 波门阈值
 
 %% 航迹管理参数
 params.confirm_hits = 3;        % 确认航迹所需连续关联次数
-params.max_misses = 3;          % 航迹删除所需连续丢失次数
+params.max_misses = 2;          % 航迹删除所需连续丢失次数
+                                %   双站 OR 检测下每帧"两站同时漏检"概率 (1-Pd)^2 = 0.01,
+                                %   连续 2 帧约 1e-4, 真实航迹几乎不会被误删;
+                                %   取 3 会让鬼航迹多存活一帧 (见 compare_track_mgmt.m)
 params.init_cov = diag([1000, 1000, 100, 100, ...
     params.omega_init_std^2, params.accel_init_std^2, params.accel_init_std^2]);  % 新航迹初始协方差
-params.max_new_tracks = 3;      % 每步最多新建航迹数
+params.max_new_tracks = 1;      % 每步最多新建航迹数
+                                %   取 3 时每帧都有机会补生鬼航迹, 是 GOSPA 虚假分量的主要来源;
+                                %   取 1 后多目标仅延迟 1 帧出生 (见 compare_track_mgmt.m)
 
 %% 绘图参数
 params.plot_bearing_lines = false;       % 轨迹图上叠加双站方位线

@@ -45,3 +45,10 @@ figures/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# keep documentation illustrations (docs/figs) under version control
+!docs/figs/
+!docs/figs/**
+
+# ??????????????
+_diag/

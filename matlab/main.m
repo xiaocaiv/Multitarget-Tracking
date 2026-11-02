@@ -25,7 +25,7 @@ fprintf('===== 双平台协同多目标跟踪系统 =====\n');
 % 'parallel' — 两目标匀速平行运动
 % 'crossing' — 两目标匀速交叉运动
 % 'speed'    — 一目标匀速, 另一目标变速
-SCENARIO = 'parallel';
+SCENARIO = 'crossing';
 
 %% ---- 特征辅助开关 ----
 % true  = 启用 LOFAR+DEMON 频谱特征辅助 JPDA 关联

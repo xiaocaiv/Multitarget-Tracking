@@ -122,9 +122,9 @@ track.feature_init  % logical
 | `target_turns` | per scenario | Per-target `[start end deg/s]` turn segments (+ = CCW) |
 | `target_accel` | per scenario | Per-target `[start end m/s²]` tangential acceleration segments |
 | `feature_gamma` | 8 | Spectrum similarity sharpening; higher = more feature reliance |
-| `max_misses` | 3 | Frames before track deletion |
-| `confirm_hits` | 3 | Hits before track confirmed |
-| `max_new_tracks` | 3 | Max new tracks per frame |
+| `max_misses` | 2 | Consecutive misses before deletion. With dual-platform OR detection, P(both miss) = (1−Pd)² = 0.01, so 2 frames ≈ 1e-4 false deletion; 3 lets ghost tracks live one frame longer (see `compare_track_mgmt.m`) |
+| `confirm_hits` | 3 | Hits before track confirmed. Do **not** raise alone: GOSPA charges unconfirmed tracks as missed, so delaying confirmation hurts |
+| `max_new_tracks` | 1 | Max births per frame. 3 lets a fresh ghost be spawned almost every frame and dominates the GOSPA false term; 1 only delays a genuine multi-target birth by one frame |
 | `gospa_p` | 2 | GOSPA distance order (1 or 2; 2 = squared-error scale) |
 | `gospa_c` | 100 | GOSPA cutoff (m); errors beyond `c` count as `c`. ≈5–10× nominal position error |
 | `gospa_alpha` | 2 | GOSPA cardinality penalty; keep 2 so the metric stays symmetric |

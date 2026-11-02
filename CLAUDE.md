@@ -103,7 +103,7 @@ track.feature_init  % logical
 | Param | Default | Effect |
 |-------|---------|--------|
 | `Pd` | 0.9 | Detection probability per target per platform |
-| `lambda_c` | 3 | Expected clutter per frame per platform |
+| `lambda_c` | 2 | Expected clutter per frame per platform |
 | `sigma_bearing` | 1° | Bearing measurement noise std |
 | `sigma_a_cv` | 0.5 m/s² | CV model acceleration noise (keep near 0.5: smaller values make the gate overconfident and cause track loss) |
 | `sigma_a_ct` | 0.4 m/s² | CT model acceleration noise |

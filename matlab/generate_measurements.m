@@ -9,9 +9,9 @@ function [z1, z2] = generate_measurements(truth, params, k)
 
 num_targets = truth.num_targets;
 
-% 初始化空结构体数组
-z1 = struct('bearing', {}, 'spectrum', {});
-z2 = struct('bearing', {}, 'spectrum', {});
+% 初始化空结构体数组 (.src: 0=杂波, k=目标 k; 供关联层评价使用)
+z1 = struct('bearing', {}, 'spectrum', {}, 'src', {});
+z2 = struct('bearing', {}, 'spectrum', {}, 'src', {});
 
 %% 目标量测
 for tgt = 1:num_targets
@@ -28,6 +28,7 @@ for tgt = 1:num_targets
     % ---- 平台1 ----
     if rand() < params.Pd
         m.bearing = mod(bearing1 + params.sigma_bearing * randn() + pi, 2*pi) - pi;
+        m.src = tgt;
 
         if params.use_features
             m.spectrum = add_spectrum_noise(F_tgt, params);
@@ -40,6 +41,7 @@ for tgt = 1:num_targets
     % ---- 平台2 ----
     if rand() < params.Pd
         m.bearing = mod(bearing2 + params.sigma_bearing * randn() + pi, 2*pi) - pi;
+        m.src = tgt;
 
         if params.use_features
             m.spectrum = add_spectrum_noise(F_tgt, params);
@@ -57,6 +59,7 @@ n_clutter2 = poissrnd(params.lambda_c);
 for c = 1:n_clutter1
     m.bearing = params.clutter_range(1) + ...
         (params.clutter_range(2) - params.clutter_range(1)) * rand();
+    m.src = 0;
     if params.use_features
         m.spectrum = generate_clutter_spectrum(params);
     else
@@ -68,6 +71,7 @@ end
 for c = 1:n_clutter2
     m.bearing = params.clutter_range(1) + ...
         (params.clutter_range(2) - params.clutter_range(1)) * rand();
+    m.src = 0;
     if params.use_features
         m.spectrum = generate_clutter_spectrum(params);
     else

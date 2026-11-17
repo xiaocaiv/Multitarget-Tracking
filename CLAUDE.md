@@ -19,11 +19,17 @@ Alternatively `cd matlab` first and call `matlab -batch "main"`. In the MATLAB G
 ### Repository layout
 
 ```
-matlab/     all simulation code (.m), flat inside this folder
-data/       ship-radiated-noise samples for the wav feature mode
-docs/       design and implementation notes (Chinese)
-archive/    pre-refactor .bak rollbacks, not referenced by any code
+matlab/                     all simulation code (.m)
+matlab/数据关联算法对比/    association-algorithm comparison code + results/
+data/                       ship-radiated-noise samples for the wav feature mode
+docs/                       design and implementation notes (Chinese)
+archive/                    pre-refactor .bak rollbacks, not referenced by any code
 ```
+
+`matlab/数据关联算法对比/` holds the NN/GNN/PDA associators, `compare_assoc.m`, `eval_assoc.m`,
+`test_assoc.m` and `results/`. `process_platform.m` adds that folder to the MATLAB path, so
+`addpath('matlab')` alone is enough for `main` / `run_simulation`; add the subfolder explicitly
+only when calling `compare_assoc` / `test_assoc` directly.
 
 Data paths are resolved by `repo_path.m`, which derives the repository root from its own file location rather than from the CWD. Never hardcode a relative `.wav` path: `generate_ship_spectrum` falls back to simulated spectra when the file is missing, so a stale relative path silently yields fake feature data (it now raises a warning).
 
@@ -40,7 +46,7 @@ generate_measurements  ──→  z1, z2  (struct arrays with .bearing, .spectru
     │
     ├─  imm_predict (all tracks):  model mixing + per-model UKF time update
     │
-    ├─  Platform 1:  imm_measurement_predict → JPDA → imm_update → combine
+    ├─  Platform 1:  imm_measurement_predict → association (params.assoc_method) → imm_update → combine
     ├─  Platform 2:  same on a pre-prediction copy (independent association)
     │
     ├─  per-model CI fusion + model-probability fusion (geometric mean)
@@ -55,12 +61,13 @@ generate_measurements  ──→  z1, z2  (struct arrays with .bearing, .spectru
 | **Params** | `init_parameters.m` | All simulation, IMM, JPDA, GOSPA, and feature parameters; builds `params.mm` |
 | **Scenarios** | `scenario_defs.m`, `apply_scenario.m` | Preset target scenarios (initial states, turn/accel segments); `params.scenario` selects one |
 | **Ground Truth** | `generate_truth.m`, `motion_cv.m`, `motion_ct.m` | Piecewise CV/CT truth from `params.target_turns` / `params.target_accel` + spectrum templates |
-| **Measurements** | `generate_measurements.m` | Struct array: `.bearing` (rad) + `.spectrum` (96×1 normed); includes Poisson clutter |
+| **Measurements** | `generate_measurements.m` | Struct array: `.bearing` (rad) + `.spectrum` (96×1 normed) + `.src` (0=clutter, k=target); includes Poisson clutter |
 | **Motion Models** | `motion_cv.m`, `motion_ct.m`, `motion_ca.m`, `build_motion_models.m` | Model set definitions: `F`, `Q`, `f(x,dt)` for CV / CT / CA |
 | **IMM Core** | `imm_init.m`, `imm_predict.m`, `imm_measurement_predict.m`, `imm_update.m`, `imm_combine.m`, `ci_fuse.m`, `stabilize_cov.m` | Mixing, per-model predict/update, probability update, CI fusion, covariance repair |
 | **UKF Core** | `generate_sigma_points.m`, `measurement_bearing.m`, `ukf_measurement_predict.m`, `ukf_predict.m` | Pure kinematic — **never modify for feature work** |
-| **JPDA Core** | `feasible_events.m`, `jpda_associate.m` | Validation matrix → feasible joint events → marginal β probabilities |
-| **Orchestration** | `jpda_process_platform.m` | Per-platform: IMM measurement predict → JPDA → per-model update → spectrum update |
+| **JPDA Core** | `feasible_events.m`, `jpda_associate.m` | Validation matrix → feasible joint events → marginal β probabilities; optional event cap → PDA fallback |
+| **Association** | `process_platform.m`, `spectrum_likelihood.m`, `update_track_spectrum.m`, `hungarian_square.m`, `matlab/数据关联算法对比/*` | `params.assoc_method` dispatch (NN/GNN/PDA/JPDA); shared likelihood/feature/Hungarian helpers; comparison + evaluation scripts |
+| **Orchestration** | `jpda_process_platform.m`, `matlab/数据关联算法对比/assoc_process_platform.m` | Per-platform: IMM measurement predict → association → per-model update → spectrum update |
 | **Management** | `manage_tracks.m`, `triangulate_init.m` | Track birth (triangulation + spectrum consistency check + IMM init) and death |
 | **Evaluation** | `gospar.m`, `eval_gospa.m`, `compare_imm.m` | GOSPA metric, per-frame evaluation, model-set ablation (CV / CV+CT / CV+CT+CA) |
 | **Entry** | `main.m`, `run_simulation.m`, `run_scenarios.m` | Simulation loop + history storage; single-run wrapper; multi-scenario overview |
@@ -69,7 +76,8 @@ generate_measurements  ──→  z1, z2  (struct arrays with .bearing, .spectru
 ### Key Design Decisions
 
 - **Common 7-D state for all models**: `x = [px; py; vx; vy; omega; ax; ay]`. Sharing one state space makes mixing and fusion trivial; the CV model uses neither `omega` nor acceleration, CT uses `omega`, CA uses `(ax, ay)`, and each keeps the unused components unchanged so the IMM can hand them to the owning model. CV is linear (`F`), CT and CA are nonlinear and are propagated by sigma points.
-- **IMM-JPDA coupling**: JPDA gates and marginal β are computed from the *probability-weighted combined* prediction (`z_comb`, `S_comb` of `imm_measurement_predict`), then each model is updated with the same β. Model probabilities are updated from the β-weighted innovation likelihood, and skipped when β0 ≥ 0.9 (no usable measurement).
+- **Association switch**: `params.assoc_method` selects `'nn' | 'gnn' | 'pda' | 'jpda'` (default `'jpda'`). All methods return the same `[β0; β1..βm]` per track, so `imm_update`, CI fusion, and track management are shared. `'jpda'` delegates to the original `jpda_process_platform.m` unchanged (bit-for-bit on the default path).
+- **IMM-association coupling**: gates and marginal β are computed from the *probability-weighted combined* prediction (`z_comb`, `S_comb` of `imm_measurement_predict`), then each model is updated with the same β. Model probabilities are updated from the β-weighted innovation likelihood, and skipped when β0 ≥ 0.9 (no usable measurement).
 - **Model probability fusion**: the two platform posteriors are combined by normalized geometric mean `mu ∝ sqrt(mu1 .* mu2)`, which corresponds to using each platform's likelihood once.
 - **Sequential platform processing**: Platform 1 updated first, Platform 2 operates on a copy taken after prediction. This avoids joint multi-sensor JPDA complexity.
 - **Measurements are struct arrays**: Each element has `.bearing` (scalar) and `.spectrum` (96×1 vector). Backward-compatible via `[z1.bearing]` to extract a numeric vector.
@@ -104,6 +112,11 @@ track.feature_init  % logical
 |-------|---------|--------|
 | `Pd` | 0.9 | Detection probability per target per platform |
 | `lambda_c` | 2 | Expected clutter per frame per platform |
+| `assoc_method` | `'jpda'` | `'nn'` / `'gnn'` / `'pda'` / `'jpda'`; see `compare_assoc.m` |
+| `assoc_unassoc_threshold` | 0.5 | Total β above which a measurement counts as associated (drives births) |
+| `assoc_jpda_max_events` | 50000 | Exact JPDA event cap; exceeding it falls back to PDA (`Inf` disables) |
+| `assoc_seed_truth` | false | Seed tracks from truth and (with `max_new_tracks=0`) disable births for the association-only benchmark |
+| `assoc_seed_cov` | 20 m / 5 m/s | Initial covariance of truth-seeded tracks |
 | `sigma_bearing` | 1° | Bearing measurement noise std |
 | `sigma_a_cv` | 0.5 m/s² | CV model acceleration noise (keep near 0.5: smaller values make the gate overconfident and cause track loss) |
 | `sigma_a_ct` | 0.4 m/s² | CT model acceleration noise |

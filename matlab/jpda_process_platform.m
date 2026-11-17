@@ -1,8 +1,11 @@
-function [tracks, unassociated] = jpda_process_platform(tracks, measurements, plat_pos, params)
+function [tracks, unassociated, info] = jpda_process_platform(tracks, measurements, plat_pos, params)
 %JPDA_PROCESS_PLATFORM 对单个平台执行完整 JPDA + IMM-UKF 更新流程
 %   [tracks, unassociated] = JPDA_PROCESS_PLATFORM(tracks, measurements, plat_pos, params)
+%   [tracks, unassociated, info] = JPDA_PROCESS_PLATFORM(...)
 %
 %   unassociated: 未关联量测索引 (逻辑数组)
+%   info:         关联层记录 (beta / beta0 / track_ids / 耗时 / 事件数),
+%                 供 run_simulation 汇总与 eval_assoc 评价
 %
 %   对每个航迹:
 %     1. IMM 各模型量测预测 (组合值用于波门/关联, 模型值用于条件更新)
@@ -14,6 +17,15 @@ function [tracks, unassociated] = jpda_process_platform(tracks, measurements, pl
 num_tracks = length(tracks);
 num_meas = length(measurements);
 unassociated = true(1, max(num_meas, 0));
+
+info = struct();
+info.method = 'jpda';
+info.beta = cell(num_tracks, 1);
+info.beta0 = ones(num_tracks, 1);
+info.track_ids = reshape(cellfun(@(t) t.id, tracks), 1, []);
+info.t_assoc = 0;
+info.n_events = 0;
+info.fallback = false;
 
 if num_tracks == 0
     return;
@@ -31,8 +43,14 @@ for t = 1:num_tracks
 end
 
 % ---------- 第2步: JPDA 关联 (组合预测) ----------
-[beta, ~, ~, beta0, unassociated] = jpda_associate(...
+tic;
+[beta, ~, ~, beta0, unassociated, jinfo] = jpda_associate(...
     z_preds, Ss, cell(num_tracks, 1), measurements, tracks, plat_pos, params);
+info.t_assoc = toc;
+info.beta = beta;
+info.beta0 = beta0;
+info.n_events = jinfo.n_events;
+info.fallback = jinfo.fallback;
 
 % ---------- 第3步: 模型条件更新 + 组合 ----------
 for t = 1:num_tracks
@@ -52,36 +70,5 @@ for t = 1:num_tracks
     if params.use_features
         tracks{t} = update_track_spectrum(tracks{t}, measurements, beta{t}, params);
     end
-end
-end
-
-% ========================================================================
-function track = update_track_spectrum(track, measurements, beta, params)
-% 利用 JPDA 权重更新航迹频谱模板 (加权平均 + 指数平滑)
-
-num_meas = length(measurements);
-if num_meas == 0, return; end
-
-spec_weighted = zeros(params.N_features, 1);
-total_w = 0;
-for j = 1:num_meas
-    w = beta(j + 1);  % beta(1)=beta0, beta(2:end) 对应各量测
-    if w > 0.01
-        spec_weighted = spec_weighted + w * measurements(j).spectrum;
-        total_w = total_w + w;
-    end
-end
-if total_w < 0.01, return; end
-
-spec_new = spec_weighted / total_w;
-spec_new = spec_new / norm(spec_new);
-
-if ~track.feature_init
-    track.spectrum = spec_new;
-    track.feature_init = true;
-else
-    alpha = 0.3;
-    track.spectrum = (1 - alpha) * track.spectrum + alpha * spec_new;
-    track.spectrum = track.spectrum / norm(track.spectrum);
 end
 end

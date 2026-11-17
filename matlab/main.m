@@ -25,16 +25,21 @@ fprintf('===== 双平台协同多目标跟踪系统 =====\n');
 % 'parallel' — 两目标匀速平行运动
 % 'crossing' — 两目标匀速交叉运动
 % 'speed'    — 一目标匀速, 另一目标变速
-SCENARIO = 'crossing';
+SCENARIO = 'speed';
 
 %% ---- 特征辅助开关 ----
-% true  = 启用 LOFAR+DEMON 频谱特征辅助 JPDA 关联
+% true  = 启用 LOFAR+DEMON 频谱特征辅助关联
 % false = 纯方位角跟踪
 USE_FEATURES = true;
 
+%% ---- 数据关联算法 ----
+% 'jpda' (默认, 联合概率数据关联) | 'gnn' (全局最近邻) |
+% 'nn' (局部最近邻) | 'pda' (逐航迹概率数据关联)
+ASSOC_METHOD = 'jpda';
+
 %% 初始化
 params = init_parameters(struct('scenario', SCENARIO, ...
-    'use_features', USE_FEATURES));
+    'use_features', USE_FEATURES, 'assoc_method', ASSOC_METHOD));
 truth = generate_truth(params);
 fprintf('场景: %s (%s)\n', params.scenario_label, params.scenario);
 
@@ -54,6 +59,7 @@ fprintf('仿真时长: %d s, 步长: %d s, 总步数: %d\n', ...
     params.T_sim, params.dt, params.K);
 fprintf('运动模型: IMM [%s], 转移矩阵对角 %.2f\n', ...
     strjoin(params.imm_models, '+'), params.imm_transition(1, 1));
+fprintf('数据关联: %s\n', upper(params.assoc_method));
 if params.mobile_platforms
     fprintf('目标数: %d, 平台初始位置: [%.0f, %.0f], [%.0f, %.0f]\n', ...
         params.num_targets, params.plat1_pos, params.plat2_pos);
@@ -106,9 +112,9 @@ for k = 1:params.K
         tracks2{t} = tracks{t};
     end
 
-    % ---------- 4. 双平台并行 JPDA + IMM-UKF 更新 ----------
-    [tracks,  unassoc1] = jpda_process_platform(tracks,  z1, params.plat1_pos, params);
-    [tracks2, unassoc2] = jpda_process_platform(tracks2, z2, params.plat2_pos, params);
+    % ---------- 4. 双平台并行 关联 + IMM-UKF 更新 ----------
+    [tracks,  unassoc1] = process_platform(tracks,  z1, params.plat1_pos, params);
+    [tracks2, unassoc2] = process_platform(tracks2, z2, params.plat2_pos, params);
 
     % ---------- 5. 协方差交叉融合 (逐模型) ----------
     n_models = numel(params.mm);

@@ -25,6 +25,14 @@ end
 tracks = {};
 next_track_id = 1;
 tracks_history = cell(params.K, 1);
+assoc_history = cell(params.K, 2);   % 每帧每平台的关联记录 (beta / beta0 / 耗时)
+meas_src = cell(params.K, 2);        % 每帧每平台量测的来源目标 (0=杂波)
+
+% 关联层受控实验: 用真值初始化航迹 (配合 max_new_tracks=0 禁止新生)
+if isfield(params, 'assoc_seed_truth') && params.assoc_seed_truth
+    tracks = seed_tracks_from_truth(truth, params);
+    next_track_id = numel(tracks) + 1;
+end
 
 for k = 1:params.K
     % 0. 移动平台: 覆写当前步位置
@@ -51,9 +59,9 @@ for k = 1:params.K
         tracks2{t} = tracks{t};
     end
 
-    % 4. 双平台并行处理
-    [tracks,  unassoc1] = jpda_process_platform(tracks,  z1, params.plat1_pos, params);
-    [tracks2, unassoc2] = jpda_process_platform(tracks2, z2, params.plat2_pos, params);
+    % 4. 双平台并行处理 (关联算法由 params.assoc_method 选择)
+    [tracks,  unassoc1, info1] = process_platform(tracks,  z1, params.plat1_pos, params);
+    [tracks2, unassoc2, info2] = process_platform(tracks2, z2, params.plat2_pos, params);
 
     % 5. 逐模型协方差交叉融合
     n_models = numel(params.mm);
@@ -96,6 +104,10 @@ for k = 1:params.K
         unassoc1, unassoc2, params, next_track_id);
 
     tracks_history{k} = tracks;
+    assoc_history{k, 1} = info1;
+    assoc_history{k, 2} = info2;
+    meas_src{k, 1} = reshape([z1.src], 1, []);
+    meas_src{k, 2} = reshape([z2.src], 1, []);
 
     % ECM 优化: 决定下一步平台位置
     if params.mobile_platforms && k < params.K
@@ -175,6 +187,48 @@ if nargout >= 4
     sim.truth = truth;
     sim.params = params;
     sim.gos = gos;
+    sim.assoc_history = assoc_history;
+    sim.meas_src = meas_src;
+end
+end
+
+% ========================================================================
+function tracks = seed_tracks_from_truth(truth, params)
+%SEED_TRACKS_FROM_TRUTH 用第 1 帧真值初始化航迹 (关联层受控实验)
+%   配合 max_new_tracks=0 使用: 排除出生/鬼影, 只比较关联+滤波.
+
+if isfield(params, 'assoc_seed_cov')
+    P = params.assoc_seed_cov;
+else
+    P = params.init_cov;
+end
+
+tracks = {};
+for tgt = 1:truth.num_targets
+    x = zeros(7, 1);
+    x(1:4) = truth.X{tgt}(1:4, 1);
+    x(5) = truth.X{tgt}(5, 1);
+
+    tr = struct();
+    tr.x = x;
+    tr.P = P;
+    tr.id = tgt;
+    tr.imm = imm_init(x, P, params);
+    tr.hit_count = params.confirm_hits;
+    tr.miss_count = 0;
+    tr.confirmed = true;
+
+    if params.use_features
+        s = truth.spectrum{tgt};
+        s = s(:) / norm(s);
+        tr.spectrum = s;
+        tr.feature_init = true;
+    else
+        tr.spectrum = NaN;
+        tr.feature_init = false;
+    end
+
+    tracks{end + 1} = tr; %#ok<AGROW>
 end
 end
 

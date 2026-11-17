@@ -110,6 +110,16 @@ params.state_dim = 7;
 params.Pg = 0.99;               % 波门概率
 params.gate_gamma = chi2inv(params.Pg, 1);  % 1-DOF 波门阈值
 
+%% 数据关联参数 (见 process_platform.m / 数据关联算法对比/)
+params.assoc_method = 'jpda';           % 'nn' | 'gnn' | 'pda' | 'jpda'
+params.assoc_unassoc_threshold = 0.5;   % 量测被任一航迹"占用"的判定阈值
+params.assoc_jpda_max_events = 50000;   % JPDA 事件数上界; Inf 关闭, 超出退化为 PDA
+
+% 关联层受控实验: 用真值初始化航迹并禁止新生 (只比较关联+滤波, 排除出生/鬼影)
+params.assoc_seed_truth = false;
+params.assoc_seed_cov = diag([20^2, 20^2, 5^2, 5^2, ...
+    (1 * pi / 180)^2, 0.3^2, 0.3^2]);
+
 %% 航迹管理参数
 params.confirm_hits = 3;        % 确认航迹所需连续关联次数
 params.max_misses = 2;          % 航迹删除所需连续丢失次数

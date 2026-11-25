@@ -100,6 +100,25 @@ params.target_specs(1) = struct('blade_count', 4, 'shaft_freq', 3, ...
 params.target_specs(2) = struct('blade_count', 5, 'shaft_freq', 4.5, ...
     'n_lines', 10, 'seed', 200, 'wav_file', repo_path('data', 'Motor_40s.wav'));
 
+%% 真实音频量测（ShipEar 官方样例，见 audio_bank.m / gen_meas_audio.m）
+params.use_audio = false;       % true = 用真实音频生成量测（需 params.audio_bank）
+params.audio_bank = [];         % 由 main / 测试脚本注入；为空则首次调用时内部缓存
+params.audio = struct( ...
+    'vessel',    {{'MarDeCangas', 'Zodiac'}}, ...   % 每个目标用哪段录音
+    'snr_db',    [12, 6], ...                       % 两站宽带 SNR (dB)
+    'eq_node_db', [0 0 0; 3 -2 4], ...              % 站间平滑频响节点 (dB)
+    'eq_node_f', [10, 100, 500]);                   % 节点频率 (Hz)
+
+% 声纹似然的加权方式（见 spectrum_likelihood.m）
+params.feature_scale = 0.7;     % LLR 温度缩放，抑制单次过度自信
+params.feature_tau   = 10;      % 模板老化时间常数 (s)
+params.sig_alpha     = 0.3;     % 模板指数平滑系数
+params.k             = 1;       % 当前帧号（用于老化；主循环中更新）
+params.ell_gate      = 0;       % 起批 LLR 门限
+params.dup_dist      = 200;     % 起批去重距离 (m)
+params.init_r_min    = 50;      % 起批距离下界 (m)
+params.init_r_max    = 5000;    % 起批距离上界 (m)
+
 %% UKF 参数
 params.alpha = 1e-3;
 params.beta = 2;

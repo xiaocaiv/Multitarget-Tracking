@@ -37,11 +37,44 @@ USE_FEATURES = true;
 % 'nn' (局部最近邻) | 'pda' (逐航迹概率数据关联)
 ASSOC_METHOD = 'jpda';
 
+%% ---- 真实音频量测开关 ----
+% true  = 由 ShipEar 官方样例音频生成量测（真实声纹，需 05_目标噪声特征 下的数据）
+% false = 由合成频谱生成量测（原链路）
+USE_AUDIO = false;
+
+%% ---- 平台运动开关 ----
+% false = 静止平台（推荐：先把"特征到底有没有用"钉死，变量少、因果清楚）
+% true  = 移动平台 + ECM 优化（第二阶段变量，见计划文档 P7）
+MOBILE_PLATFORMS = false;
+
 %% 初始化
-params = init_parameters(struct('scenario', SCENARIO, ...
-    'use_features', USE_FEATURES, 'assoc_method', ASSOC_METHOD));
+over = struct('scenario', SCENARIO, 'use_features', USE_FEATURES, ...
+    'assoc_method', ASSOC_METHOD, 'mobile_platforms', MOBILE_PLATFORMS);
+if USE_AUDIO
+    over.use_audio = true;
+    over.T_sim = 60;               % 音频素材有限，默认 60 s（可自行改）
+    over.K     = 60;               % dt = 1 s
+end
+params = init_parameters(over);
+
+%% 若启用真实音频：加载声纹库并注入
+if USE_AUDIO
+    fprintf('加载声纹库（ShipEar 官方样例）...\n');
+    bank = audio_bank();
+    params.audio_bank = bank;
+    params.llr = bank.llr;         % 校准 LLR 参数（feature_llr / spectrum_likelihood 使用）
+    params.use_audio = true;
+    % 音频链路不需要合成频谱真值，跳过 WAV 读取以加快启动
+    for t = 1:numel(params.target_specs)
+        params.target_specs(t).wav_file = '';
+    end
+end
+
 truth = generate_truth(params);
 fprintf('场景: %s (%s)\n', params.scenario_label, params.scenario);
+if USE_AUDIO, src_label = '真实音频声纹'; else, src_label = '合成频谱'; end
+if MOBILE_PLATFORMS, plat_label = '移动 + ECM'; else, plat_label = '静止'; end
+fprintf('量测源: %s | 平台: %s\n', src_label, plat_label);
 
 %% 移动平台初始化
 if params.mobile_platforms
@@ -85,6 +118,9 @@ plat_history.head2 = zeros(1, params.K);
 fprintf('\n仿真进行中...\n');
 
 for k = 1:params.K
+
+    % ---------- 0a. 当前帧号（供声纹模板老化使用） ----------
+    params.k = k;
 
     % ---------- 0. 移动平台: 覆写当前步位置 ----------
     if params.mobile_platforms
@@ -148,10 +184,20 @@ for k = 1:params.K
             tracks{t}.miss_count = tracks{t}.miss_count + 1;
         end
 
-        % 合并频谱 (仅在特征辅助时生效)
+        % 合并声纹/频谱模板 (仅在特征辅助时生效)
         if params.use_features && tracks{t}.feature_init && tracks2{t}.feature_init
-            spec_avg = (tracks{t}.spectrum + tracks2{t}.spectrum) / 2;
-            tracks{t}.spectrum = spec_avg / norm(spec_avg);
+            if isfield(tracks{t}, 'tpl_line') && ~isempty(tracks{t}.tpl_line) ...
+                    && isfield(tracks2{t}, 'tpl_line') && ~isempty(tracks2{t}.tpl_line)
+                w1 = max(tracks{t}.q, 1e-3);
+                w2 = max(tracks2{t}.q, 1e-3);
+                tl = w1 * tracks{t}.tpl_line + w2 * tracks2{t}.tpl_line;
+                tb = w1 * tracks{t}.tpl_band + w2 * tracks2{t}.tpl_band;
+                tracks{t}.tpl_line = tl / (norm(tl) + 1e-12);
+                tracks{t}.tpl_band = tb / (norm(tb) + 1e-12);
+            elseif ~isempty(tracks{t}.spectrum) && ~isempty(tracks2{t}.spectrum)
+                spec_avg = (tracks{t}.spectrum + tracks2{t}.spectrum) / 2;
+                tracks{t}.spectrum = spec_avg / norm(spec_avg);
+            end
         end
 
         % 清除临时字段

@@ -5,7 +5,23 @@ function [z1, z2] = generate_measurements(truth, params, k)
 %   输出 (结构体数组, 可能为空 0x0):
 %     z1(j).bearing  — 平台1 第j个量测的方位角 (rad)
 %     z1(j).spectrum — 平台1 第j个量测的 96x1 含噪频谱
+%     z1(j).src      — 0=杂波, k=目标 k
 %     z2: 同上, 平台2
+%
+%   params.use_audio = true 时改由 GEN_MEAS_AUDIO 生成（真实音频声纹，
+%   量测额外带 .line/.band/.q/.snr 字段，.spectrum 为空）。
+
+persistent BANK
+
+if isfield(params, 'use_audio') && params.use_audio
+    if isfield(params, 'audio_bank') && ~isempty(params.audio_bank)
+        BANK = params.audio_bank;
+    elseif isempty(BANK)
+        BANK = audio_bank();
+    end
+    [z1, z2] = gen_meas_audio(BANK, truth, params, k);
+    return;
+end
 
 num_targets = truth.num_targets;
 

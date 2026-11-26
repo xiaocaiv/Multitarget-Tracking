@@ -19,7 +19,7 @@ snrs = {[18 12], [12 6], [6 0]};
 sets = {'geometry', 'feature'};
 
 fprintf('===== 杂波 × SNR 扫描：%d 种子，T=%d s =====\n', nSeed, T_sim);
-bank = audio_bank('verbose', false);
+bank = audio_bank('source', 'origin', 'verbose', false);
 
 R = struct('lam', {}, 'si', {}, 'setting', {}, 'seed', {}, 'ok', {}, ...
            'rmse1', {}, 'rmse2', {}, 'gos', {}, 'nfalse', {});

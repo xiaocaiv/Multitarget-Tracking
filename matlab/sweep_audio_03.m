@@ -19,7 +19,7 @@ fprintf('===== 真实音频闭环对比：%d 个种子，T=%d s，scenario=%s ==
 
 % 声纹库只加载一次
 fprintf('加载声纹库...\n');
-bank = audio_bank('verbose', false);
+bank = audio_bank('source', 'origin', 'verbose', false);
 
 settings = {'geometry', 'feature'};
 S = struct('setting', {}, 'seed', {}, 'rmse', {}, 'missed', {}, ...

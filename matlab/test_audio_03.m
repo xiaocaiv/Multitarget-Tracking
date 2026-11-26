@@ -3,7 +3,7 @@ function test_audio_03()
 clc; rng(7);
 
 fprintf('===== 载入声纹库 =====\n');
-bank = audio_bank();
+bank = audio_bank('source', 'origin');
 
 fprintf('\n===== 参数与真值 =====\n');
 params = init_parameters(struct('use_audio', true, 'mobile_platforms', false, ...

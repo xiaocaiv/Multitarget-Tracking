@@ -40,7 +40,7 @@ ASSOC_METHOD = 'jpda';
 %% ---- 真实音频量测开关 ----
 % true  = 由 ShipEar 官方样例音频生成量测（真实声纹，需 05_目标噪声特征 下的数据）
 % false = 由合成频谱生成量测（原链路）
-USE_AUDIO = false;
+USE_AUDIO = true;
 
 %% ---- 平台运动开关 ----
 % false = 静止平台（推荐：先把"特征到底有没有用"钉死，变量少、因果清楚）
@@ -60,7 +60,7 @@ params = init_parameters(over);
 %% 若启用真实音频：加载声纹库并注入
 if USE_AUDIO
     fprintf('加载声纹库（ShipEar 官方样例）...\n');
-    bank = audio_bank();
+    bank = audio_bank('source', 'origin');
     params.audio_bank = bank;
     params.llr = bank.llr;         % 校准 LLR 参数（feature_llr / spectrum_likelihood 使用）
     params.use_audio = true;
